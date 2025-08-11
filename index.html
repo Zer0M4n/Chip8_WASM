@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Chip8 WASM</title>
+<style>
+  html, body {
+    height: 100%; margin: 0; background: #111;
+    display: flex; justify-content: center; align-items: center;
+  }
+  #screen {
+    display: grid;
+    grid-template-columns: repeat(64, 10px);
+    grid-template-rows: repeat(32, 10px);
+  }
+  .pixel {
+    width: 10px; height: 10px; background: black;
+  }
+  .pixel.on {
+    background: white;
+  }
+</style>
+</head>
+<body>
+  <div id="screen"></div>
+
+  <script src="chip8.js"></script>
+  <script>
+    const COLS = 64, ROWS = 32;
+    window.pixels = [];
+    const screen = document.getElementById("screen");
+    for(let i=0; i < ROWS*COLS; i++){
+      const div = document.createElement("div");
+      div.className = "pixel";
+      screen.appendChild(div);
+      window.pixels.push(div);
+    }
+
+    async function loadRom(path){
+      const response = await fetch(path);
+      if(!response.ok){
+        throw new Error(`Error cargando ROM: ${response.statusText}`);
+      }
+      const buffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      const ptr = Module._malloc(bytes.length);
+      if(!ptr) throw new Error('No se pudo reservar memoria para la ROM');
+
+      Module.HEAPU8.set(bytes, ptr);
+      Module.ccall('load_rom', null, ['number', 'number'], [ptr, bytes.length]);
+      Module._free(ptr);
+
+      console.log('ROM cargada:', path);
+    }
+
+    Module.onRuntimeInitialized = async function(){
+      console.log('WASM runtime listo');
+      try {
+        await loadRom('rom/1-chip8-logo (1).ch8');
+        setInterval(() => {
+          Module.ccall('step', null, [], []);
+        }, 60);
+      } catch(e) {
+        console.error('Error cargando ROM o durante ejecución:', e);
+      }
+    }
+  </script>
+</body>
+</html>
