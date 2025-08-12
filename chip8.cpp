@@ -38,13 +38,18 @@ public:
   Chip8() {
     table_opcode.fill(nullptr);
     table_opcode[0x0] = &Chip8::clear_screen;
-    table_opcode[0x6] = &Chip8::load_normalRegister;
-    table_opcode[0xA] = &Chip8::load_IndexRegister;
-    table_opcode[0xD] = &Chip8::draw_sprite;
     table_opcode[0x1] = &Chip8::jump;
-    table_opcode[0x7] = &Chip8::add;
     table_opcode[0x3] = &Chip8::skip_opcode;
     table_opcode[0x4] = &Chip8::skip_opcodeEquals;
+    table_opcode[0x5] = &Chip8::skip_opcodeNextRegister;
+    table_opcode[0x6] = &Chip8::load_normalRegister;
+    table_opcode[0x7] = &Chip8::add;
+    table_opcode[0xA] = &Chip8::load_IndexRegister;
+    table_opcode[0xD] = &Chip8::draw_sprite;
+    
+    
+    
+    
   }
   
   //Opcodes fuctions
@@ -114,10 +119,10 @@ public:
     if (V[x] == nn)
     {
       pc += 4; //skip sigiente intructions
+    } else {
+      pc += 2;
     }
-
-    pc += 2;
-    
+ 
   }
   
   void skip_opcodeEquals(uint16_t opcode){ //4XNN - skip next opcode if vX != NN 
@@ -127,8 +132,10 @@ public:
     if (V[x] != nn)
     {
       pc += 4;
+    } else {
+      pc += 2;
     }
-    pc += 2;
+    
   }
   
   void skip_opcodeNextRegister(uint16_t opcode){ //5XY0 - skip next opcode if vX == vY
@@ -138,10 +145,9 @@ public:
     if (V[x] == V[y])
     {
       pc += 4;
+    } else {
+      pc += 2;
     }
-
-    pc += 2;
-    
   }
 
   
