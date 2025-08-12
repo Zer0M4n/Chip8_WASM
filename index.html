@@ -93,7 +93,7 @@
         setInterval(() => {
           Module.ccall('step', null, [], []);
           updateDebugger();
-        }, 500);
+        }, 60);
       } catch (e) {
         console.error('Error load rom fail:', e);
       }

@@ -39,11 +39,13 @@ public:
     table_opcode.fill(nullptr);
     table_opcode[0x0] = &Chip8::clear_screen;
     table_opcode[0x1] = &Chip8::jump;
+    table_opcode[0x2] = &Chip8::call_subroutine;
     table_opcode[0x3] = &Chip8::skip_opcode;
     table_opcode[0x4] = &Chip8::skip_opcodeEquals;
     table_opcode[0x5] = &Chip8::skip_opcodeNextRegister;
     table_opcode[0x6] = &Chip8::load_normalRegister;
     table_opcode[0x7] = &Chip8::add;
+    table_opcode[0x9] = &Chip8::skip_opcodeEqualsRegister;
     table_opcode[0xA] = &Chip8::load_IndexRegister;
     table_opcode[0xD] = &Chip8::draw_sprite;
     
@@ -150,7 +152,24 @@ public:
     }
   }
 
+  void skip_opcodeEqualsRegister(uint16_t opcode){ //9XY0 - skip next opcode if vX != vY
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t y = (opcode & 0x00F0) >> 4;
+
+    if (V[x] != V[y])
+    {
+      pc += 4;
+    } else {
+      pc += 2;
+    }
+    
+  } 
   
+  void call_subroutine(uint16_t opcode){ //2NNN  - push return address onto stack and call subroutine at address NNN
+    stack[sp] = pc;
+    ++sp;
+    pc = opcode & 0X0FFF;
+  }
   // opcodes debuggers
   
   void opcode_warning(uint16_t opcode) {
