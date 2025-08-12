@@ -1,70 +1,112 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8" />
-<title>Chip8 WASM</title>
-<style>
-  html, body {
-    height: 100%; margin: 0; background: #111;
-    display: flex; justify-content: center; align-items: center;
-  }
-  #screen {
-    display: grid;
-    grid-template-columns: repeat(64, 10px);
-    grid-template-rows: repeat(32, 10px);
-  }
-  .pixel {
-    width: 10px; height: 10px; background: black;
-  }
-  .pixel.on {
-    background: white;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>Chip8 WASM</title>
+  <style>
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      background: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 20px;
+    }
+
+    #screen {
+      display: grid;
+      grid-template-columns: repeat(64, 10px);
+      grid-template-rows: repeat(32, 10px);
+      border: 2px solid #444;
+    }
+
+    #screen_debugger {
+      background: #b22222;
+      display: auto;
+      justify-content: flex-start;
+      align-items: flex-start;
+      height: 320px;
+      width: 500px;
+      padding: 10px;
+      color: #fff;
+      font-family: monospace;
+      overflow-y: auto;
+      border-radius: 6px;
+      box-shadow: 0 0 8px #a00;
+    }
+
+    .pixel {
+      width: 10px;
+      height: 10px;
+      background: black;
+    }
+
+    .pixel.on {
+      background: white;
+    }
+  </style>
 </head>
+
 <body>
   <div id="screen"></div>
+  <div id="screen_debugger">
+    screen_debugger
+  </div>
 
   <script src="chip8.js"></script>
   <script>
     const COLS = 64, ROWS = 32;
     window.pixels = [];
     const screen = document.getElementById("screen");
-    for(let i=0; i < ROWS*COLS; i++){
+    for (let i = 0; i < ROWS * COLS; i++) {
       const div = document.createElement("div");
       div.className = "pixel";
       screen.appendChild(div);
       window.pixels.push(div);
     }
 
-    async function loadRom(path){
+    async function loadRom(path) {
       const response = await fetch(path);
-      if(!response.ok){
+      if (!response.ok) {
         throw new Error(`Error cargando ROM: ${response.statusText}`);
       }
       const buffer = await response.arrayBuffer();
       const bytes = new Uint8Array(buffer);
 
       const ptr = Module._malloc(bytes.length);
-      if(!ptr) throw new Error('No se pudo reservar memoria para la ROM');
+      if (!ptr) throw new Error('No memory load');
 
       Module.HEAPU8.set(bytes, ptr);
       Module.ccall('load_rom', null, ['number', 'number'], [ptr, bytes.length]);
       Module._free(ptr);
 
-      console.log('ROM cargada:', path);
+      console.log('ROM load !!!!:', path);
     }
 
-    Module.onRuntimeInitialized = async function(){
+    Module.onRuntimeInitialized = async function () {
       console.log('WASM runtime listo');
-      try {   
+      try {
         await loadRom('rom/3-corax+.ch8');
         setInterval(() => {
           Module.ccall('step', null, [], []);
-        }, 6);
-      } catch(e) {
-        console.error('Error cargando ROM o durante ejecución:', e);
+          updateDebugger();
+        }, 500);
+      } catch (e) {
+        console.error('Error load rom fail:', e);
       }
     }
+
+    function updateDebugger() {
+      const ptr = Module.ccall('getDebuggerString', 'number', [], []);
+      const dbgStr = Module.UTF8ToString(ptr);
+      const html = dbgStr.replace(/\n/g, "<br>");
+      document.getElementById('screen_debugger').innerHTML = html;
+    }
+
   </script>
 </body>
+
 </html>

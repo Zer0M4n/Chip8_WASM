@@ -2,6 +2,10 @@
 #include <cstdint>
 #include <iostream>
 #include <emscripten.h>
+#include <iomanip> 
+
+//Debugger expor to JS 
+static std::string g_lastDebugString;
 
 EM_JS(void, redenderizar_js, (uint8_t* gfx_ptr), {
   const ROWS = 32, COLS = 64;
@@ -17,8 +21,11 @@ EM_JS(void, redenderizar_js, (uint8_t* gfx_ptr), {
 
 class Chip8 {
 public:
+  
   uint16_t pc = 0x200; // progrma counter
-  uint16_t I = 0; //register specialy 
+  uint16_t I = 0; //register specialy
+  uint16_t sp = 0; // stack pointer 
+  std::array<uint16_t ,16> stack{};
   std::array<uint8_t, 4096> memory{};
   std::array<uint8_t, 16> V{}; //register
   std::array<std::array<uint8_t, 64>, 32> gfx{}; //graphics
@@ -37,16 +44,13 @@ public:
     table_opcode[0x1] = &Chip8::jump;
     table_opcode[0x7] = &Chip8::add;
     table_opcode[0x3] = &Chip8::skip_opcode;
+    table_opcode[0x4] = &Chip8::skip_opcodeEquals;
   }
   
   //Opcodes fuctions
   
-  void jump(uint16_t opcode){ //1nnn - Jump
+  void jump(uint16_t opcode){ //1NNN - Jump to address NNN
     pc = opcode & 0x0FFF;
-
-    ConsoleDebugger(opcode);
-
-
   }
 
   void clear_screen(uint16_t opcode) { //00E0 - Clear the screen
@@ -57,26 +61,23 @@ public:
       opcode_warning(opcode);
     }
     pc += 2;
-    ConsoleDebugger(opcode);
   }
 
-  void load_normalRegister(uint16_t opcode) { // 6xnn - Load normal register with immediate value
+  void load_normalRegister(uint16_t opcode) { // 6XNN - Load normal register with immediate value
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn = opcode & 0x00FF;
     V[x] = nn;
     pc += 2;
-    ConsoleDebugger(opcode);
 
   }
 
-  void load_IndexRegister(uint16_t opcode) { //Annn - Load index register with immediate value
-    I = opcode & 0x0FFF;
+  void load_IndexRegister(uint16_t opcode) { //ANNN - Load index register with immediate value
+    I = (opcode & 0x0FFF);
     pc += 2;
-    ConsoleDebugger(opcode);
 
   }
 
-  void draw_sprite(uint16_t opcode) { //Dxyn - Draw sprite to screen (only aligned)
+  void draw_sprite(uint16_t opcode) { //DXNN - Draw sprite to screen (only aligned)
 
     uint8_t x = V[(opcode & 0x0F00) >> 8] % 64;
     uint8_t y = V[(opcode & 0x00F0) >> 4] % 32;
@@ -96,22 +97,18 @@ public:
       }
     }
     pc += 2;
-    ConsoleDebugger(opcode);
   }
 
   void add(uint16_t opcode){ //7XNN - Add the value NN to VX.
-    uint8_t x = (opcode & 0x0F00);
+    uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn  = (opcode & 0x00FF);
 
     V[x] = (V[x] + nn) & 0x00FF;
     pc += 2;
-
-    std::cout << "ADD  \n" ;
-
   }
   
-  void skip_opcode(uint16_t opcode){ //3xnn - skip next opcode if vX == NN
-    uint8_t x = (opcode & 0x0F00);
+  void skip_opcode(uint16_t opcode){ //3XNN - skip next opcode if vX == NN
+    uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn  = (opcode & 0x00FF);
 
     if (V[x] == nn)
@@ -122,37 +119,105 @@ public:
     pc += 2;
     
   }
+  
+  void skip_opcodeEquals(uint16_t opcode){ //4XNN - skip next opcode if vX != NN 
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t nn = (opcode & 0x00FF);
+
+    if (V[x] != nn)
+    {
+      pc += 4;
+    }
+    pc += 2;
+  }
+  
+  void skip_opcodeNextRegister(uint16_t opcode){ //5XY0 - skip next opcode if vX == vY
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t y = (opcode & 0x00F0) >> 4;
+
+    if (V[x] == V[y])
+    {
+      pc += 4;
+    }
+
+    pc += 2;
+    
+  }
+
+  
   // opcodes debuggers
+  
   void opcode_warning(uint16_t opcode) {
     std::cout << "Opcode desconocido: 0x" << std::hex << opcode << std::dec << "\n";
     pc += 2;
   }
+  
+  std::string to_hex(uint32_t val, int width) {
+    char buffer[20];
+    // %0*X => ancho variable, mayúsculas
+    std::sprintf(buffer, "%0*X", width, val);
+    return std::string(buffer);
+}
 
-  void ConsoleDebugger(uint16_t opcode){
-    // Detecta DXYN: cualquier opcode que empiece con 0xD
-    if ((opcode & 0xF000) == 0xD000) {
-        uint8_t x = (opcode & 0x0F00) >> 8;
-        uint8_t y = (opcode & 0x00F0) >> 4;
-        uint8_t height = opcode & 0x000F;
+  std::string ConsoleDebuggerStr(uint16_t opcode) {
+    std::string out = "================= DEBUG CHIP-8 =================\n";
 
-        std::cout << "Draw Display opcode: 0x" 
-                  << std::hex << opcode 
-                  << " | PC: 0x" << pc
-                  << " | X: V" << (int)x
-                  << " | Y: V" << (int)y
-                  << " | Height: " << (int)height
-                  << "\n";
+    // REGISTROS
+    out += "[REGISTROS]\n";
+    for (int i = 0; i < 16; i++) {
+        out += "V[" + to_hex(i,1) + "]: 0x" + to_hex(V[i],2) + "  ";
+        if ((i+1) % 8 == 0) out += "\n";
     }
-    
-    std::cout << "Opcode: "<< std::hex << opcode << std::dec << "\n";
-  }
+
+    out += "I:  0x" + to_hex(I,4) + "    PC: 0x" + to_hex(pc,4) + "\n";
+
+    // OPCODE
+    out += "\n[OPCODE]\n";
+    out += "Actual: 0x" + to_hex(opcode,4) + "\n";
+
+    uint8_t x  = (opcode & 0x0F00) >> 8;
+    uint8_t y  = (opcode & 0x00F0) >> 4;
+    uint8_t kk = (opcode & 0x00FF);
+    uint16_t nnn = opcode & 0x0FFF;
+    uint8_t n  = opcode & 0x000F;
+
+    out += "X: " + std::to_string(x) + "  Y: " + std::to_string(y) + 
+           "  KK: 0x" + to_hex(kk,2) + "  NNN: 0x" + to_hex(nnn,3) + 
+           "  N: " + std::to_string(n) + "\n";
+
+    // STACK
+    out += "\n[STACK] (SP=" + std::to_string(sp) + ")\n";
+    for (int i = 0; i < 16; i++) {
+        out += "S[" + to_hex(i,1) + "]: 0x" + to_hex(stack[i],4) + "  ";
+        if ((i+1) % 4 == 0) out += "\n";
+    }
+
+    // MEMORIA
+    out += "\n[MEMORY PREVIEW] desde PC\n";
+    for (int i = 0; i < 10; i++) {
+        uint16_t addr = pc + i * 2;
+        if (addr >= 4096) break;
+        uint16_t instr = (memory[addr] << 8) | memory[addr + 1];
+        out += "0x" + to_hex(addr,4) + ": 0x" + to_hex(instr,4);
+        if (i == 0) out += "   <-- actual";
+        out += "\n";
+    }
+
+    out += "===============================================\n\n";
+
+    return out;
+}
 
   void emulate_cycle() {
     uint16_t opcode = (memory[pc] << 8) | memory[pc + 1];
     uint8_t op = (opcode & 0xF000) >> 12;
     if (table_opcode[op]) {
       (this->*table_opcode[op])(opcode);
+
+      //print debugger 
+      g_lastDebugString = ConsoleDebuggerStr(opcode);
     } else {
+      //print opcodes desconocidos
       opcode_warning(opcode);
     }
 
@@ -184,5 +249,9 @@ extern "C" {
   EMSCRIPTEN_KEEPALIVE
   void load_rom(uint8_t* data, int size) {
     chip8.load_rom(data, size);
+  }
+    EMSCRIPTEN_KEEPALIVE
+  const char* getDebuggerString() {
+    return g_lastDebugString.c_str();
   }
 }

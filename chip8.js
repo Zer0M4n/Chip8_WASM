@@ -4003,6 +4003,7 @@ async function createWasm() {
       return (...args) => ccall(ident, returnType, argTypes, args, opts);
     };
 
+
   FS.createPreloadedFile = FS_createPreloadedFile;
   FS.staticInit();;
 // End JS library code
@@ -4047,6 +4048,7 @@ if (Module['wasmBinary']) wasmBinary = Module['wasmBinary'];
 // Begin runtime exports
   Module['ccall'] = ccall;
   Module['cwrap'] = cwrap;
+  Module['UTF8ToString'] = UTF8ToString;
   var missingLibrarySymbols = [
   'writeI53ToI64',
   'writeI53ToI64Clamped',
@@ -4262,7 +4264,6 @@ missingLibrarySymbols.forEach(missingLibrarySymbol)
   'PATH_FS',
   'UTF8Decoder',
   'UTF8ArrayToString',
-  'UTF8ToString',
   'stringToUTF8Array',
   'stringToUTF8',
   'lengthBytesUTF8',
@@ -4462,14 +4463,15 @@ function redenderizar_js(gfx_ptr) { const ROWS = 32, COLS = 64; const memory = n
 // Imports from the Wasm binary.
 var _step = Module['_step'] = makeInvalidEarlyAccess('_step');
 var _load_rom = Module['_load_rom'] = makeInvalidEarlyAccess('_load_rom');
+var _getDebuggerString = Module['_getDebuggerString'] = makeInvalidEarlyAccess('_getDebuggerString');
 var _fflush = makeInvalidEarlyAccess('_fflush');
 var _strerror = makeInvalidEarlyAccess('_strerror');
+var _emscripten_stack_get_end = makeInvalidEarlyAccess('_emscripten_stack_get_end');
+var _emscripten_stack_get_base = makeInvalidEarlyAccess('_emscripten_stack_get_base');
 var _malloc = Module['_malloc'] = makeInvalidEarlyAccess('_malloc');
 var _free = Module['_free'] = makeInvalidEarlyAccess('_free');
 var _emscripten_stack_init = makeInvalidEarlyAccess('_emscripten_stack_init');
 var _emscripten_stack_get_free = makeInvalidEarlyAccess('_emscripten_stack_get_free');
-var _emscripten_stack_get_base = makeInvalidEarlyAccess('_emscripten_stack_get_base');
-var _emscripten_stack_get_end = makeInvalidEarlyAccess('_emscripten_stack_get_end');
 var __emscripten_stack_restore = makeInvalidEarlyAccess('__emscripten_stack_restore');
 var __emscripten_stack_alloc = makeInvalidEarlyAccess('__emscripten_stack_alloc');
 var _emscripten_stack_get_current = makeInvalidEarlyAccess('_emscripten_stack_get_current');
@@ -4477,14 +4479,15 @@ var _emscripten_stack_get_current = makeInvalidEarlyAccess('_emscripten_stack_ge
 function assignWasmExports(wasmExports) {
   Module['_step'] = _step = createExportWrapper('step', 0);
   Module['_load_rom'] = _load_rom = createExportWrapper('load_rom', 2);
+  Module['_getDebuggerString'] = _getDebuggerString = createExportWrapper('getDebuggerString', 0);
   _fflush = createExportWrapper('fflush', 1);
   _strerror = createExportWrapper('strerror', 1);
+  _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'];
+  _emscripten_stack_get_base = wasmExports['emscripten_stack_get_base'];
   Module['_malloc'] = _malloc = createExportWrapper('malloc', 1);
   Module['_free'] = _free = createExportWrapper('free', 1);
   _emscripten_stack_init = wasmExports['emscripten_stack_init'];
   _emscripten_stack_get_free = wasmExports['emscripten_stack_get_free'];
-  _emscripten_stack_get_base = wasmExports['emscripten_stack_get_base'];
-  _emscripten_stack_get_end = wasmExports['emscripten_stack_get_end'];
   __emscripten_stack_restore = wasmExports['_emscripten_stack_restore'];
   __emscripten_stack_alloc = wasmExports['_emscripten_stack_alloc'];
   _emscripten_stack_get_current = wasmExports['emscripten_stack_get_current'];

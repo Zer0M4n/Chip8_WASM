@@ -3,10 +3,14 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/home/developer/emsdk/upstream/emscripten/system/include",
+                "/home/developer/emsdk/upstream/emscripten/system/include/emscripten",
+                "/home/developer/emsdk/upstream/emscripten/cache/sysroot/include",
+                "/home/developer/emsdk/upstream/emscripten/cache/sysroot/include/emscripten"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/gcc",
+            "compilerPath": "/home/developer/emsdk/upstream/emscripten/emcc",
             "cStandard": "c17",
             "cppStandard": "gnu++17",
             "intelliSenseMode": "linux-gcc-x64"
