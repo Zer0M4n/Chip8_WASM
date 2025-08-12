@@ -17,11 +17,11 @@ EM_JS(void, redenderizar_js, (uint8_t* gfx_ptr), {
 
 class Chip8 {
 public:
-  uint16_t pc = 0x200;
-  uint16_t I = 0;
+  uint16_t pc = 0x200; // progrma counter
+  uint16_t I = 0; //register specialy 
   std::array<uint8_t, 4096> memory{};
-  std::array<uint8_t, 16> V{};
-  std::array<std::array<uint8_t, 64>, 32> gfx{};
+  std::array<uint8_t, 16> V{}; //register
+  std::array<std::array<uint8_t, 64>, 32> gfx{}; //graphics
   uint8_t delay_timer = 0;
   uint8_t sound_timer = 0;
 
@@ -34,30 +34,50 @@ public:
     table_opcode[0x6] = &Chip8::load_normalRegister;
     table_opcode[0xA] = &Chip8::load_IndexRegister;
     table_opcode[0xD] = &Chip8::draw_sprite;
+    table_opcode[0x1] = &Chip8::jump;
+    table_opcode[0x7] = &Chip8::add;
+    table_opcode[0x3] = &Chip8::skip_opcode;
+  }
+  
+  //Opcodes fuctions
+  
+  void jump(uint16_t opcode){ //1nnn - Jump
+    pc = opcode & 0x0FFF;
+
+    ConsoleDebugger(opcode);
+
+
   }
 
-  void clear_screen(uint16_t opcode) {
+  void clear_screen(uint16_t opcode) { //00E0 - Clear the screen
+   
     if (opcode == 0x00E0) {
       for (auto& row : gfx) row.fill(0);
     } else {
       opcode_warning(opcode);
     }
     pc += 2;
+    ConsoleDebugger(opcode);
   }
 
-  void load_normalRegister(uint16_t opcode) {
+  void load_normalRegister(uint16_t opcode) { // 6xnn - Load normal register with immediate value
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn = opcode & 0x00FF;
     V[x] = nn;
     pc += 2;
+    ConsoleDebugger(opcode);
+
   }
 
-  void load_IndexRegister(uint16_t opcode) {
+  void load_IndexRegister(uint16_t opcode) { //Annn - Load index register with immediate value
     I = opcode & 0x0FFF;
     pc += 2;
+    ConsoleDebugger(opcode);
+
   }
 
-  void draw_sprite(uint16_t opcode) {
+  void draw_sprite(uint16_t opcode) { //Dxyn - Draw sprite to screen (only aligned)
+
     uint8_t x = V[(opcode & 0x0F00) >> 8] % 64;
     uint8_t y = V[(opcode & 0x00F0) >> 4] % 32;
     uint8_t height = opcode & 0x000F;
@@ -76,11 +96,55 @@ public:
       }
     }
     pc += 2;
+    ConsoleDebugger(opcode);
   }
 
+  void add(uint16_t opcode){ //7XNN - Add the value NN to VX.
+    uint8_t x = (opcode & 0x0F00);
+    uint8_t nn  = (opcode & 0x00FF);
+
+    V[x] = (V[x] + nn) & 0x00FF;
+    pc += 2;
+
+    std::cout << "ADD  \n" ;
+
+  }
+  
+  void skip_opcode(uint16_t opcode){ //3xnn - skip next opcode if vX == NN
+    uint8_t x = (opcode & 0x0F00);
+    uint8_t nn  = (opcode & 0x00FF);
+
+    if (V[x] == nn)
+    {
+      pc += 4; //skip sigiente intructions
+    }
+
+    pc += 2;
+    
+  }
+  // opcodes debuggers
   void opcode_warning(uint16_t opcode) {
     std::cout << "Opcode desconocido: 0x" << std::hex << opcode << std::dec << "\n";
     pc += 2;
+  }
+
+  void ConsoleDebugger(uint16_t opcode){
+    // Detecta DXYN: cualquier opcode que empiece con 0xD
+    if ((opcode & 0xF000) == 0xD000) {
+        uint8_t x = (opcode & 0x0F00) >> 8;
+        uint8_t y = (opcode & 0x00F0) >> 4;
+        uint8_t height = opcode & 0x000F;
+
+        std::cout << "Draw Display opcode: 0x" 
+                  << std::hex << opcode 
+                  << " | PC: 0x" << pc
+                  << " | X: V" << (int)x
+                  << " | Y: V" << (int)y
+                  << " | Height: " << (int)height
+                  << "\n";
+    }
+    
+    std::cout << "Opcode: "<< std::hex << opcode << std::dec << "\n";
   }
 
   void emulate_cycle() {

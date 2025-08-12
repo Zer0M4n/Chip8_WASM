@@ -56,11 +56,11 @@
 
     Module.onRuntimeInitialized = async function(){
       console.log('WASM runtime listo');
-      try {
-        await loadRom('rom/1-chip8-logo (1).ch8');
+      try {   
+        await loadRom('rom/3-corax+.ch8');
         setInterval(() => {
           Module.ccall('step', null, [], []);
-        }, 60);
+        }, 6);
       } catch(e) {
         console.error('Error cargando ROM o durante ejecución:', e);
       }
