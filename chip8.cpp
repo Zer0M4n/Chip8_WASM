@@ -37,7 +37,7 @@ public:
 
   Chip8() {
     table_opcode.fill(nullptr);
-    table_opcode[0x0] = &Chip8::clear_screen;
+    table_opcode[0x00E0] = &Chip8::clear_screen;
     table_opcode[0x1] = &Chip8::jump;
     table_opcode[0x2] = &Chip8::call_subroutine;
     table_opcode[0x3] = &Chip8::skip_opcode;
@@ -170,6 +170,19 @@ public:
     ++sp;
     pc = opcode & 0X0FFF;
   }
+ 
+  void return_subroutine(uint16_t opcode) { //00EE  - return from subroutine to address pulled from stack
+
+    --sp;
+    pc = stack[sp];
+    
+    pc += 2;
+   
+  }
+ 
+ 
+ 
+ 
   // opcodes debuggers
   
   void opcode_warning(uint16_t opcode) {
