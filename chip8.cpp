@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <iostream>
 #include <emscripten.h>
+#include <emscripten/html5.h>
+
 #include <iomanip>
 
 // Debugger expor to JS
@@ -23,6 +25,14 @@ EM_JS(void, redenderizar_js, (uint8_t *gfx_ptr), {
   }
 });
 
+// KEYBOARD CODE
+EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *userData) {
+    printf("Key: %s\n", e->key);         // string según layout
+    printf("Code: %s\n", e->code);       // string tecla física
+    printf("KeyCode: %d\n", e->keyCode); // número
+    return EM_TRUE; // true para consumir el evento
+}
+
 class Chip8
 {
 public:
@@ -38,6 +48,9 @@ public:
 
   using OpcodeFn = void (Chip8::*)(uint16_t);
   std::array<OpcodeFn, 16> table_opcode{};
+
+  uint8_t Keymap[16] =
+  {};
 
   Chip8()
   {
@@ -58,14 +71,14 @@ public:
 
   // Opcodes fuctions
 
-  void jump(uint16_t opcode)
-  { // 1NNN - Jump to address NNN
+  void jump(uint16_t opcode) // 1NNN - Jump to address NNN
+  {
     pc = opcode & 0x0FFF;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void clear_screen(uint16_t opcode)
-  { // 00E0 - Clear the screen
+  void clear_screen(uint16_t opcode) // 00E0 - Clear the screen
+  {
 
     if (opcode == 0x00E0)
     {
@@ -76,23 +89,23 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void load_normalRegister(uint16_t opcode)
-  { // 6XNN - Load normal register with immediate value
+  void load_normalRegister(uint16_t opcode) // 6XNN - Load normal register with immediate value
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn = opcode & 0x00FF;
     V[x] = nn;
     pc += 2;
   }
 
-  void load_IndexRegister(uint16_t opcode)
-  { // ANNN - Load index register with immediate value
+  void load_IndexRegister(uint16_t opcode) // ANNN - Load index register with immediate value
+  {
     I = (opcode & 0x0FFF);
     pc += 2;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void draw_sprite(uint16_t opcode)
-  { // DXNN - Draw sprite to screen (only aligned)
+  void draw_sprite(uint16_t opcode) // DXNN - Draw sprite to screen (only aligned)
+  {
 
     uint8_t x = V[(opcode & 0x0F00) >> 8] % 64;
     uint8_t y = V[(opcode & 0x00F0) >> 4] % 32;
@@ -119,8 +132,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void add(uint16_t opcode)
-  { // 7XNN - Add the value NN to VX.
+  void add(uint16_t opcode) // 7XNN - Add the value NN to VX.
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn = (opcode & 0x00FF);
 
@@ -129,8 +142,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void skip_opcode(uint16_t opcode)
-  { // 3XNN - skip next opcode if vX == NN
+  void skip_opcode(uint16_t opcode) // 3XNN - skip next opcode if vX == NN
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn = (opcode & 0x00FF);
 
@@ -145,8 +158,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void skip_opcodeEquals(uint16_t opcode)
-  { // 4XNN - skip next opcode if vX != NN
+  void skip_opcodeEquals(uint16_t opcode) // 4XNN - skip next opcode if vX != NN
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t nn = (opcode & 0x00FF);
 
@@ -161,8 +174,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void skip_opcodeNextRegister(uint16_t opcode)
-  { // 5XY0 - skip next opcode if vX == vY
+  void skip_opcodeNextRegister(uint16_t opcode) // 5XY0 - skip next opcode if vX == vY
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
@@ -177,8 +190,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void skip_opcodeEqualsRegister(uint16_t opcode)
-  { // 9XY0 - skip next opcode if vX != vY
+  void skip_opcodeEqualsRegister(uint16_t opcode) // 9XY0 - skip next opcode if vX != vY
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
@@ -193,16 +206,16 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void call_subroutine(uint16_t opcode)
-  { // 2NNN  - push return address onto stack and call subroutine at address NNN
+  void call_subroutine(uint16_t opcode) // 2NNN  - push return address onto stack and call subroutine at address NNN
+  {
     stack[sp] = pc;
     ++sp;
     pc = opcode & 0X0FFF;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void return_subroutine(uint16_t opcode)
-  { // 00EE  - return from subroutine to address pulled from stack
+  void return_subroutine(uint16_t opcode) // 00EE  - return from subroutine to address pulled from stack
+  {
     --sp;
     pc = stack[sp];
     pc += 2;
@@ -210,8 +223,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void equals_register(uint16_t opcode)
-  { // 8XY0 - set vX to the value of vY
+  void equals_register(uint16_t opcode) // 8XY0 - set vX to the value of vY
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
@@ -222,8 +235,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void or_register(uint16_t opcode)
-  { // 8XY1 -  set vX to the result of bitwise vX OR vY
+  void or_register(uint16_t opcode) // 8XY1 -  set vX to the result of bitwise vX OR vY
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
@@ -246,8 +259,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void xor_register(uint16_t opcode)
-  { // 8XY3 -set vX to the result of bitwise vX XOR vY
+  void xor_register(uint16_t opcode) // 8XY3 -set vX to the result of bitwise vX XOR vY
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
@@ -257,8 +270,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void add_register(uint16_t opcode)
-  { // 8XY4 -add vY to vX, vF is set to 1 if an overflow happened, to 0 if not, even if X=F!
+  void add_register(uint16_t opcode) // 8XY4 -add vY to vX, vF is set to 1 if an overflow happened, to 0 if not, even if X=F!
+  {
 
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
@@ -280,8 +293,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void subtract_register(uint16_t opcode)
-  { // 8XY5 -subtract vY from vX, vF is set to 0 if an underflow happened, to 1 if not, even if X=F!
+  void subtract_register(uint16_t opcode) // 8XY5 -subtract vY from vX, vF is set to 0 if an underflow happened, to 1 if not, even if X=F!
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
     uint16_t subtract = V[x] - V[y];
@@ -306,15 +319,15 @@ public:
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
-    V[x] = V[y];                // Copiar V[Y] a V[X]
-    V[0xF] = V[x] & 0x1;        // Guardar el bit menos significativo
-    V[x] >>= 1;                 // Desplazar un bit a la derecha
+    V[x] = V[y];         // Copiar V[Y] a V[X]
+    V[0xF] = V[x] & 0x1; // Guardar el bit menos significativo
+    V[x] >>= 1;          // Desplazar un bit a la derecha
 
     pc += 2;
-    
-    g_lastDebugString = ConsoleDebuggerStr(opcode);
 
+    g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
+
   void f_8XY7(uint16_t opcode) // // 8XY7 - 	set vX to the result of subtracting vX from vY, vF is set to 0 if an underflow happened, to 1 if not, even if X=F!
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
@@ -329,30 +342,25 @@ public:
       V[0xF] = 0;
     }
 
-    V[x] =   V[y] - V[x];
+    V[x] = V[y] - V[x];
 
     pc += 2;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
-
-    
   }
-  void f_8XYE(uint16_t opcode) //  8XYE - 	set vX to vY and shift vX one bit to the left, set vF to the bit shifted out, even if X=F! 
-
+  
+  void f_8XYE(uint16_t opcode) //  8XYE - 	set vX to vY and shift vX one bit to the left, set vF to the bit shifted out, even if X=F!
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
     // En este modo, Y normalmente se ignora
-    V[0xF] = (V[x] & 0x80) >> 7;  // bit más significativo de VX
-    V[x] <<= 1;                   // desplaza VX directamente
+    V[0xF] = (V[x] & 0x80) >> 7; // bit más significativo de VX
+    V[x] <<= 1;                  // desplaza VX directamente
 
     pc += 2;
-    
+
     g_lastDebugString = ConsoleDebuggerStr(opcode);
-
-    
   }
-
 
   // helper funcion opcode
   void helper0x0(uint16_t opcode)
@@ -408,7 +416,7 @@ public:
       shift_register(opcode);
       std::cout << "SHIFT_register" << "\n";
     }
-    else if (lastNibble == 0x0007) 
+    else if (lastNibble == 0x0007)
     {
       f_8XY7(opcode);
       std::cout << "8XY7_register" << "\n";
@@ -417,17 +425,15 @@ public:
     {
       f_8XYE(opcode);
       std::cout << "8XYE_register" << "\n";
-    
     }
-    
-    
-
-    
-
     else
     {
       opcode_warning(opcode);
     }
+  }
+
+  void helper0xF(uint16_t opcode)
+  {
   }
   // opcodes debuggers
 
@@ -506,11 +512,13 @@ public:
   {
     uint16_t opcode = (memory[pc] << 8) | memory[pc + 1];
     uint8_t op = (opcode & 0xF000) >> 12;
+    
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, key_callback);
+
     if (table_opcode[op])
     {
       (this->*table_opcode[op])(opcode);
-          std::cout << "Opcode conocido: 0x" << std::hex << opcode << std::dec << "\n";
-
+      std::cout << "Opcode conocido: 0x" << std::hex << opcode << std::dec << "\n";
     }
     else
     {
