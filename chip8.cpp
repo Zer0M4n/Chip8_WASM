@@ -303,8 +303,56 @@ public:
 
   void shift_register(uint16_t opcode) // 8XY6 - set vX to vY and shift vX one bit to the right, set vF to the bit shifted out, even if X=F!
   {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t y = (opcode & 0x00F0) >> 4;
+
+    V[x] = V[y];                // Copiar V[Y] a V[X]
+    V[0xF] = V[x] & 0x1;        // Guardar el bit menos significativo
+    V[x] >>= 1;                 // Desplazar un bit a la derecha
+
+    pc += 2;
+    
+    g_lastDebugString = ConsoleDebuggerStr(opcode);
 
   }
+  void f_8XY7(uint16_t opcode) // // 8XY7 - 	set vX to the result of subtracting vX from vY, vF is set to 0 if an underflow happened, to 1 if not, even if X=F!
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t y = (opcode & 0x00F0) >> 4;
+
+    if (V[y] >= V[x])
+    {
+      V[0xF] = 1;
+    }
+    else
+    {
+      V[0xF] = 0;
+    }
+
+    V[x] =   V[y] - V[x];
+
+    pc += 2;
+    g_lastDebugString = ConsoleDebuggerStr(opcode);
+
+    
+  }
+  void f_8XYE(uint16_t opcode) //  8XYE - 	set vX to vY and shift vX one bit to the left, set vF to the bit shifted out, even if X=F! 
+
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t y = (opcode & 0x00F0) >> 4;
+
+    // En este modo, Y normalmente se ignora
+    V[0xF] = (V[x] & 0x80) >> 7;  // bit más significativo de VX
+    V[x] <<= 1;                   // desplaza VX directamente
+
+    pc += 2;
+    
+    g_lastDebugString = ConsoleDebuggerStr(opcode);
+
+    
+  }
+
 
   // helper funcion opcode
   void helper0x0(uint16_t opcode)
@@ -343,19 +391,37 @@ public:
     else if (lastNibble == 0x0003)
     {
       xor_register(opcode);
+      std::cout << "XOR_register" << "\n";
     }
     else if (lastNibble == 0x0004)
     {
       add_register(opcode);
+      std::cout << "ADD_register" << "\n";
     }
     else if (lastNibble == 0x0005)
     {
       subtract_register(opcode);
+      std::cout << "SUBSTRACT_register" << "\n";
     }
     else if (lastNibble == 0x0006)
     {
-      /* code */
+      shift_register(opcode);
+      std::cout << "SHIFT_register" << "\n";
     }
+    else if (lastNibble == 0x0007) 
+    {
+      f_8XY7(opcode);
+      std::cout << "8XY7_register" << "\n";
+    }
+    else if (lastNibble == 0x000E)
+    {
+      f_8XYE(opcode);
+      std::cout << "8XYE_register" << "\n";
+    
+    }
+    
+    
+
     
 
     else
@@ -443,6 +509,8 @@ public:
     if (table_opcode[op])
     {
       (this->*table_opcode[op])(opcode);
+          std::cout << "Opcode conocido: 0x" << std::hex << opcode << std::dec << "\n";
+
     }
     else
     {
