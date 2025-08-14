@@ -39,7 +39,7 @@ class Chip8
 {
 public:
   uint16_t pc = 0x200; // progrma counter
-  uint16_t I ;      // register specialy
+  uint16_t I;          // register specialy
   uint16_t sp = 0;     // stack pointer
   std::array<uint16_t, 16> stack{};
   std::array<uint8_t, 4096> memory{};
@@ -250,8 +250,8 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void and_register(uint16_t opcode)
-  { // 8XY2 -set vX to the result of bitwise vX AND vY
+  void and_register(uint16_t opcode) // 8XY2 -set vX to the result of bitwise vX AND vY
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
@@ -280,16 +280,9 @@ public:
     uint8_t y = (opcode & 0x00F0) >> 4;
     uint16_t sum = V[x] + V[y];
 
-    if (sum > 0xFF) // 255 OVERFLOW
-    {
-      V[0xF] = 1;
-    }
-    else
-    {
-      V[0xF] = 0;
-    }
-
-    V[x] = sum & 0xFF;
+    uint8_t overflow_flag = (sum > 0xFF) ? 1 : 0; // Calcula el flag primero
+    V[x] = sum & 0xFF;                            // Guarda el resultado
+    V[0xF] = overflow_flag;
 
     pc += 2;
 
@@ -322,9 +315,9 @@ public:
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
-    V[x] = V[y];         // Copiar V[Y] a V[X]
-    V[0xF] = V[x] & 0x1; // Guardar el bit menos significativo
-    V[x] >>= 1;          // Desplazar un bit a la derecha
+    uint8_t lsb = V[x] & 0x1; // Guarda el LSB ANTES de modificar
+    V[x] >>= 1;               // Desplaza primero
+    V[0xF] = lsb;             // Establece el flag después
 
     pc += 2;
 
@@ -336,16 +329,9 @@ public:
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
-    if (V[y] >= V[x])
-    {
-      V[0xF] = 1;
-    }
-    else
-    {
-      V[0xF] = 0;
-    }
-
-    V[x] = V[y] - V[x];
+    uint8_t no_borrow = (V[y] >= V[x]) ? 1 : 0;
+    V[x] = (V[y] - V[x]) & 0xFF;
+    V[0xF] = no_borrow;
 
     pc += 2;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
@@ -356,66 +342,62 @@ public:
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
 
-    // En este modo, Y normalmente se ignora
-    V[0xF] = (V[x] & 0x80) >> 7; // bit más significativo de VX
-    V[x] <<= 1;                  // desplaza VX directamente
-
+    uint8_t msb = (V[x] & 0x80) >> 7;
+    V[x] <<= 1;
+    V[0xF] = msb;
     pc += 2;
 
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
   void f_FX07(uint16_t opcode) // FX07 - Set VX to delay timer value
-{
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     V[x] = delay_timer;
     pc = pc + 2;
-}
+  }
 
-void f_FX55(uint16_t opcode) // FX55 - Store registers V0 through VX in memory starting at I
-{
+  void f_FX55(uint16_t opcode) // FX55 - Store registers V0 through VX in memory starting at I
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
-    for (uint8_t i = 0; i <= x; i++) {
-        memory[I + i] = V[i];
+    for (uint8_t i = 0; i <= x; i++)
+    {
+      memory[I + i] = V[i];
     }
     pc = pc + 2;
-}
+  }
 
-void f_FX65(uint16_t opcode) // FX65 - Read registers V0 through VX from memory starting at I
-{
+  void f_FX65(uint16_t opcode) // FX65 - Read registers V0 through VX from memory starting at I
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
-    for (uint8_t i = 0; i <= x; i++) {
-        V[i] = memory[I + i];  //  Leer DE memoria A registros
+    for (uint8_t i = 0; i <= x; i++)
+    {
+      V[i] = memory[I + i]; //  Leer DE memoria A registros
     }
     pc = pc + 2;
-}
+  }
 
-void Fx33(uint16_t opcode) // FX33 - Store BCD representation of VX
-{
+  void Fx33(uint16_t opcode) // FX33 - Store BCD representation of VX
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t value = V[x];
-    
-    memory[I]     = value / 100;        // Centenas
-    memory[I + 1] = (value / 10) % 10;  // Decenas  
-    memory[I + 2] = value % 10;         // Unidades
-    
-    pc = pc + 2;
-}
 
-void Fx1e(uint16_t opcode) // FX1E - Add VX to I
-{
+    memory[I] = value / 100;           // Centenas
+    memory[I + 1] = (value / 10) % 10; // Decenas
+    memory[I + 2] = value % 10;        // Unidades
+
+    pc = pc + 2;
+  }
+
+  void Fx1e(uint16_t opcode) // FX1E - Add VX to I
+  {
     uint8_t x = (opcode & 0x0F00) >> 8;
-    
+
     I += V[x];
     I &= 0xFFF; // Mantener dentro de 12 bits
-    
 
     pc = pc + 2;
-}
-
-
-
-
+  }
 
   // helper funcion opcode
   void helper0x0(uint16_t opcode)
@@ -603,21 +585,13 @@ void Fx1e(uint16_t opcode) // FX1E - Add VX to I
 
     if (table_opcode[op])
     {
-      std::cout << "Opcode conocido: 0x" << std::hex << opcode << std::dec << "\n";
-
       (this->*table_opcode[op])(opcode);
-      std::cout << "PC: 0x" << std::hex << pc
-          << " Opcode leído: 0x" << opcode
-          << " X=" << ((opcode & 0x0F00) >> 8) << "\n";
-
     }
     else
     {
       // print opcodes desconocidos
       opcode_warning(opcode);
     }
-
-     
 
     if (delay_timer > 0)
       --delay_timer;
@@ -630,12 +604,13 @@ void Fx1e(uint16_t opcode) // FX1E - Add VX to I
   // Cargar ROM desde buffer y tamaño, para llamar desde JS
   void load_rom(const uint8_t *data, size_t size)
   {
-    if (size > (4096 - 0x200)) {
-        std::cerr << "ROM demasiado grande\n";
-        return;
+    if (size > (4096 - 0x200))
+    {
+      std::cerr << "ROM demasiado grande\n";
+      return;
     }
     std::copy(data, data + size, memory.begin() + 0x200); // copia segura
-    pc = 0x200; // 
+    pc = 0x200;                                           //
   }
 };
 
