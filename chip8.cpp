@@ -29,10 +29,70 @@ EM_JS(void, redenderizar_js, (uint8_t *gfx_ptr), {
 // KEYBOARD CODE
 EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *userData)
 {
-  printf("Key: %s\n", e->key);         // string según layout
-  printf("Code: %s\n", e->code);       // string tecla física
-  printf("KeyCode: %d\n", e->keyCode); // número
+
+  
+  uint8_t keycode = e->keyCode ;
+switch (keycode)
+{
+    // Números
+    case '1': 
+        printf("key 1\n"); 
+        break;
+    case '2': 
+        printf("key 2\n"); 
+        break;
+    case '3': 
+        printf("key 3\n"); 
+        break;
+    case '4': 
+        printf("key 4\n"); 
+        break;
+
+    // QWER
+    case 'q': case 'Q':
+        printf("key Q\n"); 
+        break;
+    case 'w': case 'W':
+        printf("key W\n"); 
+        break;
+    case 'e': case 'E':
+        printf("key E\n"); 
+        break;
+    case 'r': case 'R':
+        printf("key R\n"); 
+        break;
+
+    // ASDF
+    case 'a': case 'A':
+        printf("key A\n"); 
+        break;
+    case 's': case 'S':
+        printf("key S\n"); 
+        break;
+    case 'd': case 'D':
+        printf("key D\n"); 
+        break;
+    case 'f': case 'F':
+        printf("key F\n"); 
+        break;
+
+    // ZXCV
+    case 'z': case 'Z':
+        printf("key Z\n"); 
+        break;
+    case 'x': case 'X':
+        printf("key X\n"); 
+        break;
+    case 'c': case 'C':
+        printf("key C\n"); 
+        break;
+    case 'v': case 'V':
+        printf("key V\n"); 
+        break;
+}
+  
   return EM_TRUE;                      // true para consumir el evento
+
 }
 
 class Chip8
@@ -293,20 +353,12 @@ public:
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
-    uint16_t subtract = V[x] - V[y];
-    if (V[x] >= V[y])
-    {
-      V[0xF] = 1;
-    }
-    else
-    {
-      V[0xF] = 0;
-    }
-
-    V[x] = subtract & 0xFF;
+    
+    uint8_t no_borrow = (V[x] >= V[y]) ? 1 : 0;  
+    V[x] = (V[x] - V[y]) & 0xFF;                 
+    V[0xF] = no_borrow;                          
 
     pc += 2;
-
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
@@ -415,6 +467,7 @@ public:
       opcode_warning(opcode);
     }
   }
+ 
   void helper0x8(uint16_t opcode)
   {
     uint8_t lastNibble = (opcode & 0x000F);
