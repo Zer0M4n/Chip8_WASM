@@ -90,11 +90,11 @@
     Module.onRuntimeInitialized = async function () {
       console.log('WASM runtime listo');
       try {
-        await loadRom('rom/3-corax+.ch8');
+        await loadRom('rom/4-flags.ch8');
         setInterval(() => {
           Module.ccall('step', null, [], []);
           updateDebugger();
-        }, 60);
+        }, 16);
       } catch (e) {
         console.error('Error load rom fail:', e);
       }

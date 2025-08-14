@@ -3,7 +3,8 @@
 #include <iostream>
 #include <emscripten.h>
 #include <emscripten/html5.h>
-
+#include <chrono>
+#include <thread>
 #include <iomanip>
 
 // Debugger expor to JS
@@ -26,18 +27,19 @@ EM_JS(void, redenderizar_js, (uint8_t *gfx_ptr), {
 });
 
 // KEYBOARD CODE
-EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *userData) {
-    printf("Key: %s\n", e->key);         // string según layout
-    printf("Code: %s\n", e->code);       // string tecla física
-    printf("KeyCode: %d\n", e->keyCode); // número
-    return EM_TRUE; // true para consumir el evento
+EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *userData)
+{
+  printf("Key: %s\n", e->key);         // string según layout
+  printf("Code: %s\n", e->code);       // string tecla física
+  printf("KeyCode: %d\n", e->keyCode); // número
+  return EM_TRUE;                      // true para consumir el evento
 }
 
 class Chip8
 {
 public:
   uint16_t pc = 0x200; // progrma counter
-  uint16_t I = 0;      // register specialy
+  uint16_t I ;      // register specialy
   uint16_t sp = 0;     // stack pointer
   std::array<uint16_t, 16> stack{};
   std::array<uint8_t, 4096> memory{};
@@ -50,7 +52,7 @@ public:
   std::array<OpcodeFn, 16> table_opcode{};
 
   uint8_t Keymap[16] =
-  {};
+      {};
 
   Chip8()
   {
@@ -66,6 +68,7 @@ public:
     table_opcode[0x8] = &Chip8::helper0x8;
     table_opcode[0x9] = &Chip8::skip_opcodeEqualsRegister;
     table_opcode[0xA] = &Chip8::load_IndexRegister;
+    table_opcode[0xF] = &Chip8::helper0xF;
     table_opcode[0xD] = &Chip8::draw_sprite;
   }
 
@@ -347,7 +350,7 @@ public:
     pc += 2;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
-  
+
   void f_8XYE(uint16_t opcode) //  8XYE - 	set vX to vY and shift vX one bit to the left, set vF to the bit shifted out, even if X=F!
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
@@ -361,6 +364,58 @@ public:
 
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
+
+  void f_FX07(uint16_t opcode) // FX07 - Set VX to delay timer value
+{
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    V[x] = delay_timer;
+    pc = pc + 2;
+}
+
+void f_FX55(uint16_t opcode) // FX55 - Store registers V0 through VX in memory starting at I
+{
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    for (uint8_t i = 0; i <= x; i++) {
+        memory[I + i] = V[i];
+    }
+    pc = pc + 2;
+}
+
+void f_FX65(uint16_t opcode) // FX65 - Read registers V0 through VX from memory starting at I
+{
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    for (uint8_t i = 0; i <= x; i++) {
+        V[i] = memory[I + i];  //  Leer DE memoria A registros
+    }
+    pc = pc + 2;
+}
+
+void Fx33(uint16_t opcode) // FX33 - Store BCD representation of VX
+{
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t value = V[x];
+    
+    memory[I]     = value / 100;        // Centenas
+    memory[I + 1] = (value / 10) % 10;  // Decenas  
+    memory[I + 2] = value % 10;         // Unidades
+    
+    pc = pc + 2;
+}
+
+void Fx1e(uint16_t opcode) // FX1E - Add VX to I
+{
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    
+    I += V[x];
+    I &= 0xFFF; // Mantener dentro de 12 bits
+    
+
+    pc = pc + 2;
+}
+
+
+
+
 
   // helper funcion opcode
   void helper0x0(uint16_t opcode)
@@ -434,6 +489,37 @@ public:
 
   void helper0xF(uint16_t opcode)
   {
+    uint8_t lastNibble = (opcode & 0x00FF);
+    if (lastNibble == 0x07)
+    {
+      f_FX07(opcode);
+      std::cout << "FX07 YES" << "\n";
+    }
+    else if (lastNibble == 0x65)
+    {
+      f_FX65(opcode);
+      std::cout << "FX65 YES" << "\n";
+    }
+    else if (lastNibble == 0x55)
+    {
+      f_FX55(opcode);
+      std::cout << "FX65 YES" << "\n";
+    }
+    else if (lastNibble == 0x33)
+    {
+      Fx33(opcode);
+      std::cout << "FX33 YES" << "\n";
+    }
+    else if (lastNibble == 0x1E)
+    {
+      Fx1e(opcode);
+      std::cout << "FX1e YES" << "\n";
+    }
+
+    else
+    {
+      opcode_warning(opcode);
+    }
   }
   // opcodes debuggers
 
@@ -512,19 +598,26 @@ public:
   {
     uint16_t opcode = (memory[pc] << 8) | memory[pc + 1];
     uint8_t op = (opcode & 0xF000) >> 12;
-    
+
     emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, key_callback);
 
     if (table_opcode[op])
     {
-      (this->*table_opcode[op])(opcode);
       std::cout << "Opcode conocido: 0x" << std::hex << opcode << std::dec << "\n";
+
+      (this->*table_opcode[op])(opcode);
+      std::cout << "PC: 0x" << std::hex << pc
+          << " Opcode leído: 0x" << opcode
+          << " X=" << ((opcode & 0x0F00) >> 8) << "\n";
+
     }
     else
     {
       // print opcodes desconocidos
       opcode_warning(opcode);
     }
+
+     
 
     if (delay_timer > 0)
       --delay_timer;
@@ -537,13 +630,12 @@ public:
   // Cargar ROM desde buffer y tamaño, para llamar desde JS
   void load_rom(const uint8_t *data, size_t size)
   {
-    if (size > (4096 - 0x200))
-    {
-      std::cerr << "ROM demasiado grande\n";
-      return;
+    if (size > (4096 - 0x200)) {
+        std::cerr << "ROM demasiado grande\n";
+        return;
     }
-    std::copy(data, data + size, memory.begin() + 0x200);
-    pc = 0x200;
+    std::copy(data, data + size, memory.begin() + 0x200); // copia segura
+    pc = 0x200; // 
   }
 };
 
