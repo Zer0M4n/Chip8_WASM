@@ -750,10 +750,13 @@ public:
         opcode_warning(opcode);
 
     // Decrementar timers cada ciclo
-
+    static auto last_tick = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick).count() >= 16) {
         if (delay_timer > 0) --delay_timer;
-        if (sound_timer > 0) { /*beep();*/ --sound_timer; }
-   
+        if (sound_timer > 0) { --sound_timer; }
+        last_tick = now;
+    }
 
     redenderizar_js(&gfx[0][0]);
 }
