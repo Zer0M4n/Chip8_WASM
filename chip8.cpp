@@ -11,7 +11,7 @@
 static std::string g_lastDebugString;
 // Keymap
 static std::array<uint16_t, 16> Keymap;
-EM_JS(void, beep, (), {
+/*EM_JS(void, beep, (), {
   if (typeof window !== 'undefined' && window.audioCtx) {
     try {
       const osc = window.audioCtx.createOscillator();
@@ -32,7 +32,7 @@ EM_JS(void, beep, (), {
       printf("Valio burger señor barriga");
     }
 })
-;
+;*/
 EM_JS(void, redenderizar_js, (uint8_t *gfx_ptr), {
   const ROWS = 32, COLS = 64;
   const memory = new Uint8Array(Module.HEAPU8.buffer, gfx_ptr, ROWS * COLS);
@@ -750,13 +750,10 @@ public:
         opcode_warning(opcode);
 
     // Decrementar timers cada ciclo
-    static auto last_tick = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick).count() >= 16) {
+
         if (delay_timer > 0) --delay_timer;
-        if (sound_timer > 0) { beep(); --sound_timer; }
-        last_tick = now;
-    }
+        if (sound_timer > 0) { /*beep();*/ --sound_timer; }
+   
 
     redenderizar_js(&gfx[0][0]);
 }
