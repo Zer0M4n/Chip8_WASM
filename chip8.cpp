@@ -9,7 +9,30 @@
 
 // Debugger expor to JS
 static std::string g_lastDebugString;
-
+// Keymap
+static std::array<uint16_t, 16> Keymap;
+EM_JS(void, beep, (), {
+  if (typeof window !== 'undefined' && window.audioCtx) {
+    try {
+      const osc = window.audioCtx.createOscillator();
+      const gain = window.audioCtx.createGain();
+      
+      osc.frequency.value = 800;
+      osc.type = 'square';
+      
+      gain.gain.setValueAtTime(0.05, window.audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, window.audioCtx.currentTime + 0.02);
+      
+      osc.connect(gain);
+      gain.connect(window.audioCtx.destination);
+      
+      osc.start();
+      osc.stop(window.audioCtx.currentTime + 0.02);
+    } catch (e) {
+      printf("Valio burger señor barriga");
+    }
+})
+;
 EM_JS(void, redenderizar_js, (uint8_t *gfx_ptr), {
   const ROWS = 32, COLS = 64;
   const memory = new Uint8Array(Module.HEAPU8.buffer, gfx_ptr, ROWS * COLS);
@@ -30,69 +53,79 @@ EM_JS(void, redenderizar_js, (uint8_t *gfx_ptr), {
 EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *userData)
 {
 
-  
-  uint8_t keycode = e->keyCode ;
-switch (keycode)
-{
-    // Números
-    case '1': 
-        printf("key 1\n"); 
-        break;
-    case '2': 
-        printf("key 2\n"); 
-        break;
-    case '3': 
-        printf("key 3\n"); 
-        break;
-    case '4': 
-        printf("key 4\n"); 
-        break;
+  uint8_t chip8Key = 0xFF; // valor inválido por defecto
 
-    // QWER
-    case 'q': case 'Q':
-        printf("key Q\n"); 
-        break;
-    case 'w': case 'W':
-        printf("key W\n"); 
-        break;
-    case 'e': case 'E':
-        printf("key E\n"); 
-        break;
-    case 'r': case 'R':
-        printf("key R\n"); 
-        break;
+  // Pasar a lowercase
+  char key = std::tolower(static_cast<unsigned char>(e->key[0]));
 
-    // ASDF
-    case 'a': case 'A':
-        printf("key A\n"); 
-        break;
-    case 's': case 'S':
-        printf("key S\n"); 
-        break;
-    case 'd': case 'D':
-        printf("key D\n"); 
-        break;
-    case 'f': case 'F':
-        printf("key F\n"); 
-        break;
+  switch (key)
+  {
+  // Números
+  case '1':
+    chip8Key = 0x1;
+    break;
+  case '2':
+    chip8Key = 0x2;
+    break;
+  case '3':
+    chip8Key = 0x3;
+    break;
+  case '4':
+    chip8Key = 0xC;
+    break;
 
-    // ZXCV
-    case 'z': case 'Z':
-        printf("key Z\n"); 
-        break;
-    case 'x': case 'X':
-        printf("key X\n"); 
-        break;
-    case 'c': case 'C':
-        printf("key C\n"); 
-        break;
-    case 'v': case 'V':
-        printf("key V\n"); 
-        break;
-}
-  
-  return EM_TRUE;                      // true para consumir el evento
+  // QWER
+  case 'q':
+    chip8Key = 0x4;
+    break;
+  case 'w':
+    chip8Key = 0x5;
+    break;
+  case 'e':
+    chip8Key = 0x6;
+    break;
+  case 'r':
+    chip8Key = 0xD;
+    break;
 
+  // ASDF
+  case 'a':
+    chip8Key = 0x7;
+    break;
+  case 's':
+    chip8Key = 0x8;
+    break;
+  case 'd':
+    chip8Key = 0x9;
+    break;
+  case 'f':
+    chip8Key = 0xE;
+    break;
+
+  // ZXCV
+  case 'z':
+    chip8Key = 0xA;
+    break;
+  case 'x':
+    chip8Key = 0x0;
+    break;
+  case 'c':
+    chip8Key = 0xB;
+    break;
+  case 'v':
+    chip8Key = 0xF;
+    break;
+  }
+
+  if (chip8Key != 0xFF)
+  {
+    if (eventType == EMSCRIPTEN_EVENT_KEYDOWN)
+      Keymap[chip8Key] = 1;
+    else if (eventType == EMSCRIPTEN_EVENT_KEYUP)
+      Keymap[chip8Key] = 0;
+  }
+
+  return 1; // evento manejado
 }
 
 class Chip8
@@ -111,11 +144,13 @@ public:
   using OpcodeFn = void (Chip8::*)(uint16_t);
   std::array<OpcodeFn, 16> table_opcode{};
 
-  uint8_t Keymap[16] =
-      {};
-
   Chip8()
   {
+    Keymap.fill(0);
+
+    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, key_callback);
+    emscripten_set_keyup_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, key_callback);
+
     table_opcode.fill(nullptr);
     table_opcode[0x0] = &Chip8::helper0x0;
     table_opcode[0x1] = &Chip8::jump;
@@ -128,6 +163,7 @@ public:
     table_opcode[0x8] = &Chip8::helper0x8;
     table_opcode[0x9] = &Chip8::skip_opcodeEqualsRegister;
     table_opcode[0xA] = &Chip8::load_IndexRegister;
+    table_opcode[0xE] = &Chip8::helper0xE;
     table_opcode[0xF] = &Chip8::helper0xF;
     table_opcode[0xD] = &Chip8::draw_sprite;
   }
@@ -353,10 +389,10 @@ public:
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
     uint8_t y = (opcode & 0x00F0) >> 4;
-    
-    uint8_t no_borrow = (V[x] >= V[y]) ? 1 : 0;  
-    V[x] = (V[x] - V[y]) & 0xFF;                 
-    V[0xF] = no_borrow;                          
+
+    uint8_t no_borrow = (V[x] >= V[y]) ? 1 : 0;
+    V[x] = (V[x] - V[y]) & 0xFF;
+    V[0xF] = no_borrow;
 
     pc += 2;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
@@ -451,6 +487,71 @@ public:
     pc = pc + 2;
   }
 
+  // INPUTS OPCODES
+
+  void down_Ex9E(uint16_t opcode) // Skip next instruction if key with value of Vx is pressed
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t key = V[x] & 0x0F;
+
+    if (Keymap[key])
+    {
+      pc += 4; // Salta la siguiente instrucción
+    }
+    else
+    {
+      pc += 2; // Avanza normalmente
+    }
+  }
+
+  void up_ExA1(uint16_t opcode) // skip next opcode if key in the lower 4 bits of vX is not pressed
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t key = V[x] & 0x0F;
+
+    if (!Keymap[key]) // Nota el "!" (NOT)
+    {
+      pc += 4; // Salta si NO está presionada
+    }
+    else
+    {
+      pc += 2; // Avanza normalmente
+    }
+  }
+
+  void get_key(uint16_t opcode) // Fx0A  - wait for a key pressed and released and set vX to it, in megachip mode it also updates the screen like clear
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8; // Extrae X
+
+    // Buscar cualquier tecla presionada
+    bool key_pressed = false;
+    for (uint8_t i = 0; i < 16; i++)
+    {
+      if (Keymap[i])
+      {           // Si la tecla i está presionada
+        V[x] = i; // Guardarla en Vx
+        key_pressed = true;
+        break;
+      }
+    }
+
+    if (!key_pressed)
+    {
+      // No hay tecla presionada: no avanzamos el PC, re-ejecutaremos este opcode
+      return;
+    }
+
+    // Si se presionó alguna tecla, avanzamos el PC normalmente
+    pc += 2;
+  }
+
+  void F_FX15(uint16_t opcode) // set delay timer to vX
+
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8; // Extrae X
+    delay_timer = V[x];                 // Asigna Vx al delay timer
+    pc += 2;                            // Avanzar al siguiente opcode
+  }
   // helper funcion opcode
   void helper0x0(uint16_t opcode)
   {
@@ -467,54 +568,45 @@ public:
       opcode_warning(opcode);
     }
   }
- 
+
   void helper0x8(uint16_t opcode)
   {
     uint8_t lastNibble = (opcode & 0x000F);
     if (lastNibble == 0x0000)
     {
       equals_register(opcode);
-      std::cout << "equals_register" << "\n";
     }
     else if (lastNibble == 0x0001)
     {
       or_register(opcode);
-      std::cout << "or_register" << "\n";
     }
     else if (lastNibble == 0x0002)
     {
       and_register(opcode);
-      std::cout << "and_register" << "\n";
     }
     else if (lastNibble == 0x0003)
     {
       xor_register(opcode);
-      std::cout << "XOR_register" << "\n";
     }
     else if (lastNibble == 0x0004)
     {
       add_register(opcode);
-      std::cout << "ADD_register" << "\n";
     }
     else if (lastNibble == 0x0005)
     {
       subtract_register(opcode);
-      std::cout << "SUBSTRACT_register" << "\n";
     }
     else if (lastNibble == 0x0006)
     {
       shift_register(opcode);
-      std::cout << "SHIFT_register" << "\n";
     }
     else if (lastNibble == 0x0007)
     {
       f_8XY7(opcode);
-      std::cout << "8XY7_register" << "\n";
     }
     else if (lastNibble == 0x000E)
     {
       f_8XYE(opcode);
-      std::cout << "8XYE_register" << "\n";
     }
     else
     {
@@ -528,32 +620,51 @@ public:
     if (lastNibble == 0x07)
     {
       f_FX07(opcode);
-      std::cout << "FX07 YES" << "\n";
     }
     else if (lastNibble == 0x65)
     {
       f_FX65(opcode);
-      std::cout << "FX65 YES" << "\n";
     }
     else if (lastNibble == 0x55)
     {
       f_FX55(opcode);
-      std::cout << "FX65 YES" << "\n";
     }
     else if (lastNibble == 0x33)
     {
       Fx33(opcode);
-      std::cout << "FX33 YES" << "\n";
     }
     else if (lastNibble == 0x1E)
     {
       Fx1e(opcode);
-      std::cout << "FX1e YES" << "\n";
+    }
+    else if (lastNibble == 0x0A)
+    {
+      get_key(opcode);
+    }
+    else if (lastNibble == 0x15)
+    {
+      F_FX15(opcode);
     }
 
     else
     {
       opcode_warning(opcode);
+    }
+  }
+
+  void helper0xE(uint16_t opcode)
+  {
+    uint8_t lastNibble = (opcode & 0x00FF);
+
+    if (lastNibble == 0x9E)
+    {
+      down_Ex9E(opcode);
+      std::cout << "DOWN YES" << "\n";
+    }
+    else if (lastNibble == 0xA1)
+    {
+      up_ExA1(opcode);
+      std::cout << "up YES" << "\n";
     }
   }
   // opcodes debuggers
@@ -629,30 +740,27 @@ public:
     return out;
   }
 
-  void emulate_cycle()
-  {
+  void emulate_cycle() {
     uint16_t opcode = (memory[pc] << 8) | memory[pc + 1];
     uint8_t op = (opcode & 0xF000) >> 12;
 
-    emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, key_callback);
-
     if (table_opcode[op])
-    {
-      (this->*table_opcode[op])(opcode);
-    }
+        (this->*table_opcode[op])(opcode);
     else
-    {
-      // print opcodes desconocidos
-      opcode_warning(opcode);
-    }
+        opcode_warning(opcode);
 
-    if (delay_timer > 0)
-      --delay_timer;
-    if (sound_timer > 0)
-      --sound_timer;
+    // Decrementar timers cada ciclo
+    static auto last_tick = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_tick).count() >= 16) {
+        if (delay_timer > 0) --delay_timer;
+        if (sound_timer > 0) { beep(); --sound_timer; }
+        last_tick = now;
+    }
 
     redenderizar_js(&gfx[0][0]);
-  }
+}
+
 
   // Cargar ROM desde buffer y tamaño, para llamar desde JS
   void load_rom(const uint8_t *data, size_t size)

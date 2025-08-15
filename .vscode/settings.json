@@ -63,6 +63,9 @@
         "queue": "cpp",
         "ratio": "cpp",
         "stack": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "charconv": "cpp",
+        "forward_list": "cpp",
+        "sstream": "cpp"
     }
 }

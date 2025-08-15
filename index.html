@@ -3,6 +3,9 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-eval' https://cdnjs.cloudflare.com;">
+
+
   <title>Chip8 WASM</title>
   <style>
     html,
@@ -88,18 +91,24 @@
     }
 
     Module.onRuntimeInitialized = async function () {
-      console.log('WASM runtime listo');
-      try {
-        await loadRom('rom/4-flags.ch8');
-        setInterval(() => {
-          Module.ccall('step', null, [], []);
-          updateDebugger();
-        }, 16);
-      } catch (e) {
-        console.error('Error load rom fail:', e);
-      }
-    }
+  console.log('WASM runtime listo');
+  try {
+    await loadRom('rom/7-beep.ch8');
 
+    const cyclesPerFrame = 10; // Ejecutar 10 opcodes por frame
+    const frameMs = 1000 / 60; // 60 FPS
+
+    setInterval(() => {
+      for (let i = 0; i < cyclesPerFrame; i++) {
+        Module.ccall('step', null, [], []);
+      }
+      updateDebugger(); // actualizar debugger
+    }, frameMs);
+
+  } catch (e) {
+    console.error('Error load rom fail:', e);
+  }
+};
     function updateDebugger() {
       const ptr = Module.ccall('getDebuggerString', 'number', [], []);
       const dbgStr = Module.UTF8ToString(ptr);
