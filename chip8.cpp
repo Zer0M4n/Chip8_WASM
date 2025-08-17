@@ -131,6 +131,9 @@ EM_BOOL key_callback(int eventType, const EmscriptenKeyboardEvent *e, void *user
 class Chip8
 {
 public:
+  // La dirección inicial de los sprites en memoria
+  const uint16_t FONTSET_START_ADDRESS = 0x000; // típicamente 0x000 en CHIP-8
+  const uint8_t SPRITE_HEIGHT = 5;             // cada sprite tiene 5 bytes
   uint16_t pc = 0x200; // progrma counter
   uint16_t I;          // register specialy
   uint16_t sp = 0;     // stack pointer
@@ -144,8 +147,36 @@ public:
   using OpcodeFn = void (Chip8::*)(uint16_t);
   std::array<OpcodeFn, 16> table_opcode{};
 
+  //FONT
+  const std::array<uint8_t, 80> fontset {
+    0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+    0x20, 0x60, 0x20, 0x20, 0x70, // 1
+    0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+    0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+    0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+    0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+    0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+    0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+    0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+    0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+};
+
+void loadfonset()
+{
+   std::copy(fontset.begin(), fontset.end(), memory.begin());
+
+}
+
+
   Chip8()
   {
+    loadfonset();
     Keymap.fill(0);
 
     emscripten_set_keydown_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, NULL, EM_TRUE, key_callback);
@@ -163,19 +194,14 @@ public:
     table_opcode[0x8] = &Chip8::helper0x8;
     table_opcode[0x9] = &Chip8::skip_opcodeEqualsRegister;
     table_opcode[0xA] = &Chip8::load_IndexRegister;
+    table_opcode[0xB] = &Chip8::BNNN;
+    table_opcode[0xC] = &Chip8::CXNN;
     table_opcode[0xE] = &Chip8::helper0xE;
     table_opcode[0xF] = &Chip8::helper0xF;
     table_opcode[0xD] = &Chip8::draw_sprite;
   }
 
   // Opcodes fuctions
-
-  void jump(uint16_t opcode) // 1NNN - Jump to address NNN
-  {
-    pc = opcode & 0x0FFF;
-    g_lastDebugString = ConsoleDebuggerStr(opcode);
-  }
-
   void clear_screen(uint16_t opcode) // 00E0 - Clear the screen
   {
 
@@ -188,56 +214,26 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void load_normalRegister(uint16_t opcode) // 6XNN - Load normal register with immediate value
+  void return_subroutine(uint16_t opcode) // 00EE  - return from subroutine to address pulled from stack
   {
-    uint8_t x = (opcode & 0x0F00) >> 8;
-    uint8_t nn = opcode & 0x00FF;
-    V[x] = nn;
+    --sp;
+    pc = stack[sp];
     pc += 2;
-  }
-
-  void load_IndexRegister(uint16_t opcode) // ANNN - Load index register with immediate value
-  {
-    I = (opcode & 0x0FFF);
-    pc += 2;
+    std::cout << "call" << "\n";
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void draw_sprite(uint16_t opcode) // DXNN - Draw sprite to screen (only aligned)
+  void jump(uint16_t opcode) // 1NNN - Jump to address NNN
   {
-
-    uint8_t x = V[(opcode & 0x0F00) >> 8] % 64;
-    uint8_t y = V[(opcode & 0x00F0) >> 4] % 32;
-    uint8_t height = opcode & 0x000F;
-    V[0xF] = 0;
-    for (int row = 0; row < height; ++row)
-    {
-      uint8_t sprite_byte = memory[I + row];
-      for (int col = 0; col < 8; ++col)
-      {
-        uint8_t sprite_pixel = (sprite_byte >> (7 - col)) & 1;
-        uint8_t &screen_pixel = gfx[(y + row) % 32][(x + col) % 64];
-        if (sprite_pixel == 1)
-        {
-          if (screen_pixel == 1)
-          {
-            V[0xF] = 1;
-          }
-          screen_pixel ^= 1;
-        }
-      }
-    }
-    pc += 2;
+    pc = opcode & 0x0FFF;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void add(uint16_t opcode) // 7XNN - Add the value NN to VX.
+  void call_subroutine(uint16_t opcode) // 2NNN  - push return address onto stack and call subroutine at address NNN
   {
-    uint8_t x = (opcode & 0x0F00) >> 8;
-    uint8_t nn = (opcode & 0x00FF);
-
-    V[x] = (V[x] + nn) & 0x00FF;
-    pc += 2;
+    stack[sp] = pc;
+    ++sp;
+    pc = opcode & 0X0FFF;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
@@ -272,7 +268,7 @@ public:
     }
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
-
+  
   void skip_opcodeNextRegister(uint16_t opcode) // 5XY0 - skip next opcode if vX == vY
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
@@ -288,40 +284,26 @@ public:
     }
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
-
-  void skip_opcodeEqualsRegister(uint16_t opcode) // 9XY0 - skip next opcode if vX != vY
+  
+  void load_normalRegister(uint16_t opcode) // 6XNN - Load normal register with immediate value
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
-    uint8_t y = (opcode & 0x00F0) >> 4;
-
-    if (V[x] != V[y])
-    {
-      pc += 4;
-    }
-    else
-    {
-      pc += 2;
-    }
-    g_lastDebugString = ConsoleDebuggerStr(opcode);
-  }
-
-  void call_subroutine(uint16_t opcode) // 2NNN  - push return address onto stack and call subroutine at address NNN
-  {
-    stack[sp] = pc;
-    ++sp;
-    pc = opcode & 0X0FFF;
-    g_lastDebugString = ConsoleDebuggerStr(opcode);
-  }
-
-  void return_subroutine(uint16_t opcode) // 00EE  - return from subroutine to address pulled from stack
-  {
-    --sp;
-    pc = stack[sp];
+    uint8_t nn = opcode & 0x00FF;
+    V[x] = nn;
     pc += 2;
-    std::cout << "call" << "\n";
+  }
+
+  void add(uint16_t opcode) // 7XNN - Add the value NN to VX.
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t nn = (opcode & 0x00FF);
+
+    V[x] = (V[x] + nn) & 0x00FF;
+    pc += 2;
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
+  
   void equals_register(uint16_t opcode) // 8XY0 - set vX to the value of vY
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
@@ -438,53 +420,76 @@ public:
     g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void f_FX07(uint16_t opcode) // FX07 - Set VX to delay timer value
+  void skip_opcodeEqualsRegister(uint16_t opcode) // 9XY0 - skip next opcode if vX != vY
   {
     uint8_t x = (opcode & 0x0F00) >> 8;
-    V[x] = delay_timer;
-    pc = pc + 2;
-  }
+    uint8_t y = (opcode & 0x00F0) >> 4;
 
-  void f_FX55(uint16_t opcode) // FX55 - Store registers V0 through VX in memory starting at I
-  {
-    uint8_t x = (opcode & 0x0F00) >> 8;
-    for (uint8_t i = 0; i <= x; i++)
+    if (V[x] != V[y])
     {
-      memory[I + i] = V[i];
+      pc += 4;
     }
-    pc = pc + 2;
-  }
-
-  void f_FX65(uint16_t opcode) // FX65 - Read registers V0 through VX from memory starting at I
-  {
-    uint8_t x = (opcode & 0x0F00) >> 8;
-    for (uint8_t i = 0; i <= x; i++)
+    else
     {
-      V[i] = memory[I + i]; //  Leer DE memoria A registros
+      pc += 2;
     }
-    pc = pc + 2;
+    g_lastDebugString = ConsoleDebuggerStr(opcode);
+  }
+  
+  void load_IndexRegister(uint16_t opcode) // ANNN - Load index register with immediate value
+  {
+    I = (opcode & 0x0FFF);
+    pc += 2;
+    g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
-  void Fx33(uint16_t opcode) // FX33 - Store BCD representation of VX
+  void BNNN(uint16_t opcode) // BNNN - jump to address NNN + v0
   {
-    uint8_t x = (opcode & 0x0F00) >> 8;
-    uint8_t value = V[x];
+    uint8_t nnn = opcode & 0x0FFF;
 
-    memory[I] = value / 100;           // Centenas
-    memory[I + 1] = (value / 10) % 10; // Decenas
-    memory[I + 2] = value % 10;        // Unidades
+    pc = nnn + V[0];
 
-    pc = pc + 2;
+  }
+  
+  void CXNN(uint16_t opcode) // set vx to a random value masked (bitwise AND) with NN
+  {
+     uint8_t x = (opcode & 0x0F00) >> 8;
+     uint8_t ramdom = static_cast<uint8_t>(std::rand() & 0xFF);
+    uint8_t nn = opcode & 0x00FF;
+
+
+     V[x] =  ramdom & nn;
+
+     pc += 2;
+  
   }
 
-  void Fx1e(uint16_t opcode) // FX1E - Add VX to I
+  void draw_sprite(uint16_t opcode) // DXNN - Draw sprite to screen (only aligned)
   {
-    uint8_t x = (opcode & 0x0F00) >> 8;
 
-    I += V[x];
-    I &= 0xFFF; // Mantener dentro de 12 bits
-
-    pc = pc + 2;
+    uint8_t x = V[(opcode & 0x0F00) >> 8] % 64;
+    uint8_t y = V[(opcode & 0x00F0) >> 4] % 32;
+    uint8_t height = opcode & 0x000F;
+    V[0xF] = 0;
+    for (int row = 0; row < height; ++row)
+    {
+      uint8_t sprite_byte = memory[I + row];
+      for (int col = 0; col < 8; ++col)
+      {
+        uint8_t sprite_pixel = (sprite_byte >> (7 - col)) & 1;
+        uint8_t &screen_pixel = gfx[(y + row) % 32][(x + col) % 64];
+        if (sprite_pixel == 1)
+        {
+          if (screen_pixel == 1)
+          {
+            V[0xF] = 1;
+          }
+          screen_pixel ^= 1;
+        }
+      }
+    }
+    pc += 2;
+    g_lastDebugString = ConsoleDebuggerStr(opcode);
   }
 
   // INPUTS OPCODES
@@ -519,39 +524,100 @@ public:
     }
   }
 
+  void f_FX07(uint16_t opcode) // FX07 - Set VX to delay timer value
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    V[x] = delay_timer;
+    pc = pc + 2;
+  }
+
   void get_key(uint16_t opcode) // Fx0A  - wait for a key pressed and released and set vX to it, in megachip mode it also updates the screen like clear
   {
     uint8_t x = (opcode & 0x0F00) >> 8; // Extrae X
 
-    // Buscar cualquier tecla presionada
-    bool key_pressed = false;
     for (uint8_t i = 0; i < 16; i++)
     {
-      if (Keymap[i])
-      {           // Si la tecla i está presionada
-        V[x] = i; // Guardarla en Vx
-        key_pressed = true;
-        break;
+      if(Keymap[i] == 1){
+          V[x] = i;
+          pc += 2;
+
+          break;
       }
     }
+    
 
-    if (!key_pressed)
-    {
-      // No hay tecla presionada: no avanzamos el PC, re-ejecutaremos este opcode
-      return;
-    }
-
-    // Si se presionó alguna tecla, avanzamos el PC normalmente
-    pc += 2;
   }
 
   void F_FX15(uint16_t opcode) // set delay timer to vX
-
   {
     uint8_t x = (opcode & 0x0F00) >> 8; // Extrae X
     delay_timer = V[x];                 // Asigna Vx al delay timer
     pc += 2;                            // Avanzar al siguiente opcode
   }
+  
+  void Fx18(uint16_t opcode) //set sound timer to vX, sound is played as long as the sound timer reaches zero
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    sound_timer = V[x];
+    pc += 2;
+
+  }
+
+  void Fx1e(uint16_t opcode) // FX1E - Add VX to I
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+
+    I += V[x];
+    I &= 0xFFF; // Mantener dentro de 12 bits
+
+    pc = pc + 2;
+  }
+
+  void fx29(uint16_t opcode) // set I to the 5 line high hex sprite for the lowest nibble in vX
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8; // Extraer registro X
+    uint8_t value = V[x];               // Obtener valor hexadecimal en VX (0x0 a 0xF)
+
+    
+
+    // Calcular dirección de inicio del sprite y guardar en I
+    I = FONTSET_START_ADDRESS + (value * SPRITE_HEIGHT);
+
+    pc += 2; // avanzar al siguiente opcode
+  }
+
+  void Fx33(uint16_t opcode) // FX33 - Store BCD representation of VX
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    uint8_t value = V[x];
+
+    memory[I] = value / 100;           // Centenas
+    memory[I + 1] = (value / 10) % 10; // Decenas
+    memory[I + 2] = value % 10;        // Unidades
+
+    pc = pc + 2;
+  }
+
+  void f_FX55(uint16_t opcode) // FX55 - Store registers V0 through VX in memory starting at I
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    for (uint8_t i = 0; i <= x; i++)
+    {
+      memory[I + i] = V[i];
+    }
+    pc = pc + 2;
+  }
+
+  void f_FX65(uint16_t opcode) // FX65 - Read registers V0 through VX from memory starting at I
+  {
+    uint8_t x = (opcode & 0x0F00) >> 8;
+    for (uint8_t i = 0; i <= x; i++)
+    {
+      V[i] = memory[I + i]; //  Leer DE memoria A registros
+    }
+    pc = pc + 2;
+  }
+
   // helper funcion opcode
   void helper0x0(uint16_t opcode)
   {
@@ -621,22 +687,6 @@ public:
     {
       f_FX07(opcode);
     }
-    else if (lastNibble == 0x65)
-    {
-      f_FX65(opcode);
-    }
-    else if (lastNibble == 0x55)
-    {
-      f_FX55(opcode);
-    }
-    else if (lastNibble == 0x33)
-    {
-      Fx33(opcode);
-    }
-    else if (lastNibble == 0x1E)
-    {
-      Fx1e(opcode);
-    }
     else if (lastNibble == 0x0A)
     {
       get_key(opcode);
@@ -645,7 +695,30 @@ public:
     {
       F_FX15(opcode);
     }
-
+    else if (lastNibble == 0x18)
+    {
+      Fx18(opcode);
+    }
+    else if (lastNibble == 0x1E)
+    {
+      Fx1e(opcode);
+    }
+    else if (lastNibble == 0x29)
+    {
+      fx29(opcode);
+    }
+     else if (lastNibble == 0x33)
+    {
+      Fx33(opcode);
+    }
+    else if (lastNibble == 0x55)
+    {
+      f_FX55(opcode);
+    } 
+    else if (lastNibble == 0x65)
+    {
+      f_FX65(opcode);
+    }
     else
     {
       opcode_warning(opcode);

@@ -91,7 +91,7 @@
     Module.onRuntimeInitialized = async function () {
   console.log('WASM runtime listo');
   try {
-    await loadRom('rom/tetris.ch8');
+    await loadRom('rom/1dcell.ch8');
 
     const cyclesPerFrame = 10; // Ejecutar 10 opcodes por frame
     const frameMs = 1000 / 60; // 60 FPS
