@@ -4,6 +4,7 @@
 This project implements a **CHIP-8** emulator compiled to **WebAssembly** with Emscripten, offering a high-performance emulation experience in web browsers.
 
 ---
+![Grabación 2025-08-16 193637](https://github.com/user-attachments/assets/72b4c9d3-7a81-412d-b6dc-cb38e01c9247)
 
 ## 📋 Overview
 
